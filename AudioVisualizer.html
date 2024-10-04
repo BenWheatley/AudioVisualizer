@@ -20,7 +20,7 @@
   <script>
     document.getElementById('fileInput').addEventListener('change', function(event) {
       const file = event.target.files[0];
-      document.getElementById('spinner').style.display = 'block';
+      showSpinner(true);
       if (file) {
         const reader = new FileReader();
 
@@ -34,10 +34,11 @@
           const sampleRate = audioSamples.sampleRate;
           const samples = audioSamples.samples;
           
-          document.getElementById('spinner').style.display = 'none';
+          showSpinner(false);
 
           // Wait for user to click "Generate Video"
           document.getElementById('generateVideo').addEventListener('click', function() {
+			  showSpinner(true);
 
             const framesPerSecond = 60;
             const samplesPerFrame = Math.floor(sampleRate / framesPerSecond);
@@ -45,7 +46,7 @@
             const videoEncoder = new Whammy.Video(framesPerSecond);
 
             const canvas = document.getElementById('visualizerCanvas');
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
             for (let frameIndex = 0; frameIndex < Math.floor(samples.length / samplesPerFrame); frameIndex++) {
               const frameData = samples.slice(frameIndex * samplesPerFrame, (frameIndex + 1) * samplesPerFrame);
@@ -54,18 +55,24 @@
             }
 
             // Generate and download the video
-            const videoBlob = videoEncoder.compile();
-            const downloadLink = document.getElementById('downloadLink');
-            downloadLink.href = URL.createObjectURL(videoBlob);
-            downloadLink.download = 'audio_visualization.webm';
-            downloadLink.style.display = 'block';
-            downloadLink.innerHTML = 'Download Video';
+            const videoBlob = videoEncoder.compile(false, function(outputBlob) {
+				const downloadLink = document.getElementById('downloadLink');
+				downloadLink.href = URL.createObjectURL(outputBlob);
+				downloadLink.download = 'audio_visualization.webm';
+				downloadLink.style.display = 'block';
+				downloadLink.innerHTML = 'Download Video';
+				showSpinner(false);
+			});
           });
         };
 
         reader.readAsArrayBuffer(file);
       }
     });
+    
+    function showSpinner(show) {
+		document.getElementById('spinner').style.display = show ? 'block' : 'none';
+    }
 
     function parseWAV(dataView) {
 	  // Check the WAV header
@@ -107,7 +114,7 @@
     }
 
     function drawWaveform(ctx, frameData, left, top, width, height) {
-//      ctx.clearRect(left, top, width, height);
+      ctx.clearRect(left, top, width, height);
       ctx.beginPath();
       ctx.moveTo(left, top + height / 2);
       const step = width / frameData.length;
