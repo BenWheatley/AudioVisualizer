@@ -15,9 +15,56 @@
   <div><a id="downloadLink" style="display:none">Download Video</a></div>
   <canvas id="visualizerCanvas" width="1920" height="1080" style="background: #ff00ff"></canvas>
 
-  <script src="https://cdn.jsdelivr.net/gh/antimatter15/whammy/whammy.js"></script> <!-- External Video Encoding Script -->
-
   <script>
+	let canvas = document.getElementById('visualizerCanvas');
+	let ctx = canvas.getContext('2d');
+	let videoChunks = [];
+	let audioSamples;
+	let stream = canvas.captureStream(60); // Capture canvas at 60 FPS
+	let mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+	
+	mediaRecorder.ondataavailable = function (e) {
+		if (e.data.size > 0) {
+			videoChunks.push(e.data);
+		}
+	};
+	
+	mediaRecorder.onstop = function () {
+		const videoBlob = new Blob(videoChunks, { type: 'video/webm' });
+		const downloadLink = document.getElementById('downloadLink');
+		downloadLink.href = URL.createObjectURL(videoBlob);
+		downloadLink.download = 'audio_visualization.webm';
+		downloadLink.style.display = 'block';
+		downloadLink.innerHTML = 'Download Video';
+		showSpinner(false);
+	};
+	
+	document.getElementById('generateVideo').addEventListener('click', function () {
+		showSpinner(true);
+		videoChunks = []; // Reset chunks for new video
+		mediaRecorder.start();
+		
+		const framesPerSecond = 60;
+		const sampleRate = audioSamples.sampleRate;
+		const samples = audioSamples.samples;
+		const samplesPerFrame = Math.floor(sampleRate / framesPerSecond);
+		
+		let frameIndex = 0;
+		
+		const frameInterval = setInterval(function () {
+			if (frameIndex >= Math.floor(samples.length / samplesPerFrame)) {
+				clearInterval(frameInterval);
+				mediaRecorder.stop();
+				return;
+			}
+		
+			const frameData = samples.slice(frameIndex * samplesPerFrame, (frameIndex + 1) * samplesPerFrame);
+			drawWaveform(ctx, frameData, canvas.width / 4, canvas.height / 4, canvas.width / 2, canvas.height / 2);
+		
+			frameIndex++;
+		}, 1000 / framesPerSecond);
+	});
+  
     document.getElementById('fileInput').addEventListener('change', function(event) {
       const file = event.target.files[0];
       showSpinner(true);
@@ -28,42 +75,13 @@
           const arrayBuffer = e.target.result;
           const dataView = new DataView(arrayBuffer);
 
-          const audioSamples = parseWAV(dataView);
+          audioSamples = parseWAV(dataView);
           console.log('Audio Samples:', audioSamples);
 
           const sampleRate = audioSamples.sampleRate;
           const samples = audioSamples.samples;
           
           showSpinner(false);
-
-          // Wait for user to click "Generate Video"
-          document.getElementById('generateVideo').addEventListener('click', function() {
-			  showSpinner(true);
-
-            const framesPerSecond = 60;
-            const samplesPerFrame = Math.floor(sampleRate / framesPerSecond);
-
-            const videoEncoder = new Whammy.Video(framesPerSecond);
-
-            const canvas = document.getElementById('visualizerCanvas');
-            const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-            for (let frameIndex = 0; frameIndex < Math.floor(samples.length / samplesPerFrame); frameIndex++) {
-              const frameData = samples.slice(frameIndex * samplesPerFrame, (frameIndex + 1) * samplesPerFrame);
-              drawWaveform(ctx, frameData, canvas.width/4, canvas.height/4, canvas.width/2, canvas.height/2);
-              videoEncoder.add(canvas);
-            }
-
-            // Generate and download the video
-            const videoBlob = videoEncoder.compile(false, function(outputBlob) {
-				const downloadLink = document.getElementById('downloadLink');
-				downloadLink.href = URL.createObjectURL(outputBlob);
-				downloadLink.download = 'audio_visualization.webm';
-				downloadLink.style.display = 'block';
-				downloadLink.innerHTML = 'Download Video';
-				showSpinner(false);
-			});
-          });
         };
 
         reader.readAsArrayBuffer(file);
@@ -116,7 +134,7 @@
     function drawWaveform(ctx, frameData, left, top, width, height) {
       ctx.clearRect(left, top, width, height);
       ctx.beginPath();
-      ctx.moveTo(left, top + height / 2);
+      ctx.moveTo(left, top + (height / 2));
       const step = width / frameData.length;
 
       for (let i = 0; i < frameData.length; i++) {
