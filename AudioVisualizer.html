@@ -6,14 +6,21 @@
   <title>Audio Visualizer</title>
 </head>
 <body>
+  <label for="fileInput">Select audio file:</label>
   <input type="file" id="fileInput" accept=".wav">
+  
+  <label for="imageInput">Select background image:</label>
   <input type="file" id="imageInput" accept="image/*">
+  
+  
   <div id="spinner" style="display: none;">
     <p>Loading...</p>
   </div>
 
   <button id="generateVideo">Generate Video</button>
+  
   <div><a id="downloadLink" style="display:none">Download Video</a></div>
+  
   <canvas id="visualizerCanvas" width="1920" height="1080" style="background: #ff00ff"></canvas>
 
   <script>
@@ -159,17 +166,17 @@
 		
 		// Then, draw the waveform
 		ctx.beginPath();
-		ctx.moveTo(left, top + (height / 2));
+		ctx.moveTo(left, top + (frameData[0] * height) / 2 + height / 2);
 		const step = width / frameData.length;
 
-		for (let i = 0; i < frameData.length; i++) {
+		for (let i = 1; i < frameData.length; i++) {
 			const x = left + i * step;
 			const y = top + (frameData[i] * height) / 2 + height / 2;
 			ctx.lineTo(x, y);
 		}
 
 		ctx.strokeStyle = '#ffffff';
-		ctx.lineWidth = 2;
+		ctx.lineWidth = 8;
 		ctx.stroke();
 	}
   </script>
