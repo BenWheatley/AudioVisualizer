@@ -7,6 +7,7 @@
 </head>
 <body>
   <input type="file" id="fileInput" accept=".wav">
+  <input type="file" id="imageInput" accept="image/*">
   <div id="spinner" style="display: none;">
     <p>Loading...</p>
   </div>
@@ -20,6 +21,7 @@
 	let ctx = canvas.getContext('2d');
 	let videoChunks = [];
 	let audioSamples;
+	let backgroundImage = null;
 	let stream = canvas.captureStream(60); // Capture canvas at 60 FPS
 	let mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
 	
@@ -65,88 +67,111 @@
 		}, 1000 / framesPerSecond);
 	});
   
-    document.getElementById('fileInput').addEventListener('change', function(event) {
-      const file = event.target.files[0];
-      showSpinner(true);
-      if (file) {
-        const reader = new FileReader();
+	document.getElementById('fileInput').addEventListener('change', function(event) {
+		const file = event.target.files[0];
+		showSpinner(true);
+		if (file) {
+			const reader = new FileReader();
 
-        reader.onload = function(e) {
-          const arrayBuffer = e.target.result;
-          const dataView = new DataView(arrayBuffer);
+			reader.onload = function(e) {
+				const arrayBuffer = e.target.result;
+				const dataView = new DataView(arrayBuffer);
 
-          audioSamples = parseWAV(dataView);
-          console.log('Audio Samples:', audioSamples);
+				audioSamples = parseWAV(dataView);
+				console.log('Audio Samples:', audioSamples);
 
-          const sampleRate = audioSamples.sampleRate;
-          const samples = audioSamples.samples;
-          
-          showSpinner(false);
-        };
+				showSpinner(false);
+			};
 
-        reader.readAsArrayBuffer(file);
-      }
-    });
+			reader.readAsArrayBuffer(file);
+		}
+	});
+	
+	// Load the background image
+	document.getElementById('imageInput').addEventListener('change', function(event) {
+		const file = event.target.files[0];
+		if (file) {
+			const reader = new FileReader();
+
+			reader.onload = function(e) {
+				const img = new Image();
+				img.onload = function() {
+					backgroundImage = img;
+				};
+				img.src = e.target.result; // Set the image source to the file data
+			};
+
+			reader.readAsDataURL(file); // Read the image file as a data URL
+		}
+	});
     
-    function showSpinner(show) {
+	function showSpinner(show) {
 		document.getElementById('spinner').style.display = show ? 'block' : 'none';
-    }
+	}
 
-    function parseWAV(dataView) {
-	  // Check the WAV header
-	  const chunkID = String.fromCharCode(
-		dataView.getUint8(0),
-		dataView.getUint8(1),
-		dataView.getUint8(2),
-		dataView.getUint8(3)
-	  );
+	function parseWAV(dataView) {
+		// Check the WAV header
+		const chunkID = String.fromCharCode(
+			dataView.getUint8(0),
+			dataView.getUint8(1),
+			dataView.getUint8(2),
+			dataView.getUint8(3)
+		);
 
-	  if (chunkID !== 'RIFF') {
-		console.error('This is not a valid WAV file');
-		alert("error: This is not a valid WAV file");
-		return;
-	  }
-	  
-      const sampleRate = dataView.getUint32(24, true);
-      const bitsPerSample = dataView.getUint16(34, true);
-      const numChannels = dataView.getUint16(22, true);
-      const dataOffset = 44;
-      
-	  console.log(`Sample Rate: ${sampleRate}`);
-	  console.log(`Bits Per Sample: ${bitsPerSample}`);
-	  console.log(`Number of Channels: ${numChannels}`);
-	  
-	  if (bitsPerSample != 16) {
-		  alert("unsupported bitsPerSample: " + bitsPerSample);
-		  return;
-	  }
-	  // Use a typed array for performance
-	  const sampleCount = (dataView.byteLength - dataOffset) / 2; // 2 bytes per sample for 16-bit audio
-	  const samples = new Float32Array(sampleCount);
-	  let tempSample;
-	  for (let i = 0, byteOffset = dataOffset; i < sampleCount; i++, byteOffset += 2) {
-		tempSample = dataView.getInt16(byteOffset, true); // Get 16-bit sample
-		samples[i] = tempSample / 32768;  // Normalize to [-1, 1]
-	  }
-      return { sampleRate, samples };
-    }
+		if (chunkID !== 'RIFF') {
+			console.error('This is not a valid WAV file');
+			alert("error: This is not a valid WAV file");
+			return;
+		}
 
-    function drawWaveform(ctx, frameData, left, top, width, height) {
-      ctx.clearRect(left, top, width, height);
-      ctx.beginPath();
-      ctx.moveTo(left, top + (height / 2));
-      const step = width / frameData.length;
+		const sampleRate = dataView.getUint32(24, true);
+		const bitsPerSample = dataView.getUint16(34, true);
+		const numChannels = dataView.getUint16(22, true);
+		const dataOffset = 44;
+		
+		console.log(`Sample Rate: ${sampleRate}`);
+		console.log(`Bits Per Sample: ${bitsPerSample}`);
+		console.log(`Number of Channels: ${numChannels}`);
+		
+		if (bitsPerSample != 16) {
+			alert("unsupported bitsPerSample: " + bitsPerSample);
+			return;
+		}
+		// Use a typed array for performance
+		const sampleCount = (dataView.byteLength - dataOffset) / 2; // 2 bytes per sample for 16-bit audio
+		const samples = new Float32Array(sampleCount);
+		let tempSample;
+		for (let i = 0, byteOffset = dataOffset; i < sampleCount; i++, byteOffset += 2) {
+			tempSample = dataView.getInt16(byteOffset, true); // Get 16-bit sample
+			samples[i] = tempSample / 32768;  // Normalize to [-1, 1]
+		}
+		return { sampleRate, samples };
+	}
 
-      for (let i = 0; i < frameData.length; i++) {
-        const x = left + i * step;
-        const y = top + (frameData[i] * height) / 2 + height / 2;
-        ctx.lineTo(x, y);
-      }
+	function drawWaveform(ctx, frameData, left, top, width, height) {
+		// First, draw the background image if it exists
+		if (backgroundImage) {
+			ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+		} else {
+			// Clear the canvas to avoid artifacts when no background image is used
+			ctx.clearRect(0, 0, canvas.width, canvas.height);
+		}
+		
+		// Then, draw the waveform
+		ctx.beginPath();
+		ctx.moveTo(left, top + (height / 2));
+		const step = width / frameData.length;
 
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
+		for (let i = 0; i < frameData.length; i++) {
+			const x = left + i * step;
+			const y = top + (frameData[i] * height) / 2 + height / 2;
+			ctx.lineTo(x, y);
+		}
+
+		ctx.strokeStyle = '#ffffff';
+		ctx.lineWidth = 2;
+		ctx.stroke();
+	}
   </script>
 </body>
 </html>
